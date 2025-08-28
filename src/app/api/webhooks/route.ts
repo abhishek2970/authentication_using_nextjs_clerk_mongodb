@@ -1,61 +1,44 @@
+import { NextResponse } from "next/server";
 import { Webhook } from "svix";
-import { headers } from "next/headers";
-import { createOrUpdateUser, deleteUser } from "@/lib/actions/user";
-
-const WEBHOOK_SECRET = process.env.CLERK_WEBHOOK_SECRET;
+import type { WebhookEvent } from "@clerk/nextjs/server";
 
 export async function POST(req: Request) {
+  // Clerk sends the payload via svix
   const payload = await req.text();
-  const headerPayload = headers();
 
-  const svix_id = headerPayload.get("svix-id");
-  const svix_timestamp = headerPayload.get("svix-timestamp");
-  const svix_signature = headerPayload.get("svix-signature");
+  const svixHeaders = {
+    "svix-id": req.headers.get("svix-id")!,
+    "svix-timestamp": req.headers.get("svix-timestamp")!,
+    "svix-signature": req.headers.get("svix-signature")!,
+  };
 
-  if (!svix_id || !svix_timestamp || !svix_signature) {
-    return new Response("Missing svix headers", { status: 400 });
+  const webhookSecret = process.env.CLERK_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    return new NextResponse("Missing Clerk webhook secret", { status: 500 });
   }
 
-  const wh = new Webhook(WEBHOOK_SECRET!);
+  const wh = new Webhook(webhookSecret);
 
-  let evt: any;
+  let evt: WebhookEvent;
   try {
-    evt = wh.verify(payload, {
-      "svix-id": svix_id,
-      "svix-timestamp": svix_timestamp,
-      "svix-signature": svix_signature,
-    });
+    evt = wh.verify(payload, svixHeaders) as WebhookEvent;
   } catch (err) {
-    console.error("Error verifying webhook:", err);
-    return new Response("Invalid webhook", { status: 400 });
+    console.error("Webhook verification failed:", err);
+    return new NextResponse("Invalid signature", { status: 400 });
   }
 
-  const { id, email_addresses, first_name, last_name } = evt.data;
+  // ✅ type-safe access
+  const { id, type } = evt;
 
-  if (evt.type === "user.created" || evt.type === "user.updated") {
-    try {
-      await createOrUpdateUser({
-        id,
-        email: email_addresses?.[0]?.email_address,
-        firstName: first_name,
-        lastName: last_name,
-      });
-      return new Response("User processed", { status: 200 });
-    } catch (error) {
-      console.error("Error processing user data:", error);
-      return new Response("Error saving user", { status: 500 });
-    }
+  if (type === "user.created") {
+    console.log("User created:", evt.data);
+    // TODO: save user in DB
   }
 
-  if (evt.type === "user.deleted") {
-    try {
-      await deleteUser(id);
-      return new Response("User deletion processed", { status: 200 });
-    } catch (error) {
-      console.error("Error processing user deletion:", error);
-      return new Response("Error deleting user", { status: 500 });
-    }
+  if (type === "user.deleted") {
+    console.log("User deleted:", evt.data);
+    // TODO: remove user from DB
   }
 
-  return new Response("Webhook received", { status: 200 });
+  return NextResponse.json({ success: true, eventId: id });
 }
