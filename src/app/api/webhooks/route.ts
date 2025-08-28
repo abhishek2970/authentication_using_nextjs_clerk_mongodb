@@ -10,7 +10,7 @@ export async function POST(req: Request) {
     "svix-signature": req.headers.get("svix-signature")!,
   };
 
-  const webhookSecret = process.env.CLERK_WEBHOOK_SECRET;
+  const webhookSecret = process.env.CLERK_WEBHOOK_SIGNING_SECRET;
   if (!webhookSecret) {
     return new NextResponse("Missing Clerk webhook secret", { status: 500 });
   }
