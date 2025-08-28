@@ -3,9 +3,7 @@ import { Webhook } from "svix";
 import type { WebhookEvent } from "@clerk/nextjs/server";
 
 export async function POST(req: Request) {
-  // Clerk sends the payload via svix
   const payload = await req.text();
-
   const svixHeaders = {
     "svix-id": req.headers.get("svix-id")!,
     "svix-timestamp": req.headers.get("svix-timestamp")!,
@@ -27,18 +25,17 @@ export async function POST(req: Request) {
     return new NextResponse("Invalid signature", { status: 400 });
   }
 
-  // ✅ type-safe access
-  const { id, type } = evt;
+  const { type, data } = evt;
 
   if (type === "user.created") {
-    console.log("User created:", evt.data);
+    console.log("User created:", data.id);
     // TODO: save user in DB
   }
 
   if (type === "user.deleted") {
-    console.log("User deleted:", evt.data);
+    console.log("User deleted:", data.id);
     // TODO: remove user from DB
   }
 
-  return NextResponse.json({ success: true, eventId: id });
+  return NextResponse.json({ success: true, eventId: data.id });
 }
